@@ -1,0 +1,50 @@
+name: Release TicNote OpenClaw Skill
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Skill package
+        run: python3 scripts/build_skill_package.py
+
+      - name: Verify archive
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSET="dist/ticnote-openclaw-${VERSION}.zip"
+          test -f "$ASSET"
+          unzip -t "$ASSET"
+          sha256sum "$ASSET"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSET="dist/ticnote-openclaw-${VERSION}.zip"
+          TITLE="TicNote OpenClaw Skill ${VERSION}"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$TITLE" --prerelease
+            gh release upload "$GITHUB_REF_NAME" "$ASSET" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ASSET" \
+              --title "$TITLE" \
+              --prerelease \
+              --generate-notes
+          fi
